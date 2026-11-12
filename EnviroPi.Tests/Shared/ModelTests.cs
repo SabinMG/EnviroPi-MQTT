@@ -14,7 +14,8 @@ public class TelemetryPayloadTests
             DeviceId = "pi-01",
             Timestamp = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
             TemperatureCelsius = 21.5,
-            HumidityPercent = 48.3
+            HumidityPercent = 48.3,
+            Co2Ppm = 845
         };
 
         var copy = JsonSerializer.Deserialize<TelemetryPayload>(JsonSerializer.Serialize(original))!;
@@ -23,6 +24,7 @@ public class TelemetryPayloadTests
         Assert.Equal(original.Timestamp, copy.Timestamp);
         Assert.Equal(original.TemperatureCelsius, copy.TemperatureCelsius);
         Assert.Equal(original.HumidityPercent, copy.HumidityPercent);
+        Assert.Equal(original.Co2Ppm, copy.Co2Ppm);
     }
 
     [Fact]
@@ -39,6 +41,30 @@ public class TelemetryPayloadTests
         Assert.Equal("pi-01", payload.DeviceId);
         Assert.Equal(21.5, payload.TemperatureCelsius);
         Assert.Equal(48.3, payload.HumidityPercent);
+    }
+
+    [Fact]
+    public void Co2_is_sent_as_Co2Ppm()
+    {
+        const string json = """
+            {"DeviceId":"pi-01","Timestamp":"2026-01-02T03:04:05Z","TemperatureCelsius":21.5,"HumidityPercent":48.3,"Co2Ppm":1234}
+            """;
+
+        Assert.Equal(1234, JsonSerializer.Deserialize<TelemetryPayload>(json)!.Co2Ppm);
+    }
+
+    [Fact]
+    public void Messages_without_co2_from_older_publishers_still_parse()
+    {
+        // Payload shape published before the CO2 sensor was added.
+        const string json = """
+            {"DeviceId":"pi-01","Timestamp":"2026-01-02T03:04:05Z","TemperatureCelsius":21.5,"HumidityPercent":48.3}
+            """;
+
+        var payload = JsonSerializer.Deserialize<TelemetryPayload>(json)!;
+
+        Assert.Null(payload.Co2Ppm);
+        Assert.Equal(21.5, payload.TemperatureCelsius);
     }
 }
 

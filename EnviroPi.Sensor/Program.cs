@@ -9,6 +9,7 @@ builder.Services.Configure<MqttOptions>(
 
 // One MQTT connection shared by everything that publishes
 builder.Services.AddSingleton<IMqttPublishService, MqttPublishService>();
+builder.Services.AddSingleton<ICo2Sensor, Scd4xCo2Sensor>();
 
 builder.Services.AddHostedService<SensorPublisherWorker>();
 builder.Services.AddSystemd();

@@ -11,12 +11,14 @@ public class SensorPublisherWorker : BackgroundService
     private static readonly TimeSpan PublishInterval = TimeSpan.FromSeconds(5);
 
     private readonly IMqttPublishService _publisher;
+    private readonly ICo2Sensor _co2Sensor;
     private readonly ILogger<SensorPublisherWorker> _logger;
     private Bme280? _bme280;
 
-    public SensorPublisherWorker(IMqttPublishService publisher, ILogger<SensorPublisherWorker> logger)
+    public SensorPublisherWorker(IMqttPublishService publisher, ICo2Sensor co2Sensor, ILogger<SensorPublisherWorker> logger)
     {
         _publisher = publisher;
+        _co2Sensor = co2Sensor;
         _logger = logger;
     }
 
@@ -75,8 +77,23 @@ public class SensorPublisherWorker : BackgroundService
             DeviceId = Environment.MachineName,
             Timestamp = DateTime.UtcNow,
             TemperatureCelsius = Math.Round(temp, 1),
-            HumidityPercent = Math.Round(hum, 1)
+            HumidityPercent = Math.Round(hum, 1),
+            Co2Ppm = await ReadCo2Async(stoppingToken)
         };
+    }
+
+    // A CO2 sensor problem must not stop temperature and humidity from being published.
+    private async Task<double?> ReadCo2Async(CancellationToken stoppingToken)
+    {
+        try
+        {
+            return await _co2Sensor.ReadCo2PpmAsync(stoppingToken);
+        }
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "CO2 reading failed; publishing without CO2.");
+            return null;
+        }
     }
 
     public override void Dispose()

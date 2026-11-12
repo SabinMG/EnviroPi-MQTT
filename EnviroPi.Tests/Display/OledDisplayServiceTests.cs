@@ -1,6 +1,6 @@
-using System.Device.I2c;
 using EnviroPi.Display.Rendering;
 using EnviroPi.Display.Services;
+using EnviroPi.Tests.TestDoubles;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EnviroPi.Tests.Display;
@@ -66,28 +66,5 @@ public class OledDisplayServiceTests
         var ex = Record.Exception(() => display.RenderTelemetry(22.4, 41.7));
 
         Assert.Null(ex);
-    }
-
-    private sealed class FakeI2cDevice : I2cDevice
-    {
-        public List<byte[]> Writes { get; } = [];
-        public bool FailWrites { get; set; }
-
-        public override I2cConnectionSettings ConnectionSettings { get; } = new(1, 0x3C);
-
-        public override void Write(ReadOnlySpan<byte> buffer)
-        {
-            if (FailWrites) throw new IOException("Simulated I2C failure");
-            Writes.Add(buffer.ToArray());
-        }
-
-        public override void WriteByte(byte value) => Write([value]);
-        public override byte ReadByte() => 0;
-        public override void Read(Span<byte> buffer) => buffer.Clear();
-        public override void WriteRead(ReadOnlySpan<byte> writeBuffer, Span<byte> readBuffer)
-        {
-            Write(writeBuffer);
-            readBuffer.Clear();
-        }
     }
 }
