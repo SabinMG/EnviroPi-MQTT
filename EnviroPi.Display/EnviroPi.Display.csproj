@@ -15,6 +15,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="EnviroPi.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\EnviroPi.Shared\EnviroPi.Shared.csproj" />
   </ItemGroup>
 </Project>
