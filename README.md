@@ -1,5 +1,15 @@
 # EnviroPi: MQTT telemetry on Raspberry Pi with .NET
 
+[![CI](https://github.com/SabinMG/EnviroPi/actions/workflows/ci.yml/badge.svg)](https://github.com/SabinMG/EnviroPi/actions/workflows/ci.yml)
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+<p align="center">
+  <img src="docs/oled-preview.svg" alt="The 128x64 OLED screen showing TEMPERATURE 22.4°C and HUMIDITY 41.7 %" width="420">
+  <br>
+  <sub>What the OLED shows. Rendered from the real <code>TelemetryScreen</code> code.</sub>
+</p>
+
 A .NET 10 solution of two background services that talk to each other through an **MQTT broker (Mosquitto)**:
 
 - **EnviroPi.Sensor** reads temperature and humidity from a **BME280** sensor and publishes them as JSON every 5 seconds.
@@ -88,15 +98,20 @@ EnviroPi-MQTT/
 │   ├── appsettings.json
 │   └── Program.cs
 ├── EnviroPi.Display/                     # MQTT -> OLED (subscriber)
+│   ├── Rendering/MonoBitmap.cs           # In-memory frame buffer (no SkiaSharp needed)
+│   ├── Rendering/TextRenderer.cs         # Scaled 5x8 pixel-font text drawing
+│   ├── Rendering/TelemetryScreen.cs      # Screen layout for one reading
 │   ├── Services/IDisplayService.cs       # Display abstraction injected into the worker
 │   ├── Services/OledDisplayService.cs    # SSD1306 implementation of IDisplayService
 │   ├── Workers/MqttReceiverWorker.cs     # Subscribes to the topic, calls IDisplayService
 │   ├── appsettings.json
 │   └── Program.cs
-└── net_iot_mono_repo_architecture_guide.md
+├── EnviroPi.Tests/                       # xUnit tests (unit + end-to-end with in-process broker)
+├── docs/oled-preview.svg                 # Screen preview used in this README
+└── .github/workflows/ci.yml              # Build, test and publish linux-arm64 binaries
 ```
 
-Main packages: `MQTTnet` 5.x, `Iot.Device.Bindings` 4.x, `System.Device.Gpio` 4.x, `Microsoft.Extensions.Hosting.Systemd`.
+Main packages: `MQTTnet` 5.x, `Iot.Device.Bindings` 4.x, `System.Device.Gpio` 4.x, `Microsoft.Extensions.Hosting.Systemd`. Tests use `xUnit`, `NSubstitute` and `MQTTnet.Server`.
 
 ---
 
@@ -172,8 +187,8 @@ Expected output: the publisher logs that it can't find the I2C sensor, then publ
 
 ```text
 fail: Failed to connect to I2C sensor. Running with default dummy data.
-info: Publisher connected to MQTT Broker at localhost:1883
-info: Published telemetry: {"DeviceId":"Mac","Timestamp":"...","TemperatureCelsius":20,"HumidityPercent":50}
+info: Connected to MQTT broker at localhost:1883
+info: Published to [pi/environment/telemetry]: {"DeviceId":"Mac","Timestamp":"...","TemperatureCelsius":20,"HumidityPercent":50}
 ```
 
 And the receiver:
@@ -188,7 +203,28 @@ You can start the services in any order. If the broker isn't running yet, they r
 
 ---
 
-## 4. Testing with the Mosquitto CLI tools
+## 4. Testing
+
+### Automated tests
+
+```bash
+dotnet test
+```
+
+The tests need no hardware and no Mosquitto install, so they run the same on a laptop, on the Pi and in CI.
+
+| Area | What is covered |
+|---|---|
+| `MqttConnection` | Connects first time, retries with attempt numbers, stops on cancellation |
+| `TelemetryPayload` / `MqttOptions` | JSON round trip, the exact wire format, config binding, Sensor and Display `appsettings.json` agree on broker and topic |
+| `SensorPublisherWorker` | Publishes rounded readings tagged with the machine name; shuts down cleanly |
+| OLED rendering | Font drawing, scaling, clipping, the `°` glyph, culture-independent number formatting, every BME280 temperature fits on screen |
+| `OledDisplayService` | Drives the real SSD1306 driver through a fake I2C device and checks the 1,024 bytes sent match the rendered frame pixel for pixel |
+| End to end | Real publisher → in-process MQTT broker → real receiver → display; malformed messages are skipped |
+
+Every push runs the tests on GitHub Actions and builds self-contained `linux-arm64` binaries for both services, which can be downloaded from the run's **Artifacts**.
+
+### Manual testing with the Mosquitto CLI tools
 
 The `mosquitto_sub` and `mosquitto_pub` tools are handy for checking each side on its own.
 
@@ -383,6 +419,19 @@ journalctl -u enviropi-display -f
 
 ---
 
+## Design decisions
+
+- **MQTT between the services, not direct calls.** The sensor and display don't know about each other. Either side can restart, move to another device or gain extra subscribers (a logger, a dashboard) without code changes, and the broker handles delivery.
+- **QoS 1 (at least once).** A missed reading is harmless but cheap to avoid. Each reading replaces the last one, so an occasional duplicate is fine and exactly-once (QoS 2) isn't worth its extra round trips.
+- **A shared contract library.** `TelemetryPayload` and `MqttOptions` live in `EnviroPi.Shared`, so the publisher and subscriber can't drift apart. A test also pins the exact JSON field names.
+- **Degrade, don't crash.** With no sensor, the publisher sends dummy data. With no screen, the display only logs. With no broker, both retry every 5 seconds. Services can start in any order and run on a laptop with no hardware.
+- **Hardware behind interfaces.** Workers depend on `IMqttPublishService` and `IDisplayService`, so they can be tested with fakes. The OLED service accepts an I2C device factory, so tests run the real SSD1306 driver against a fake bus.
+- **No SkiaSharp for the OLED.** `Iot.Device.Bindings` normally renders text through SkiaSharp, which ships large native libraries. A 1-bit 128×64 screen only needs to set pixels, so `MonoBitmap` and `TextRenderer` do that with the font already built into the library.
+- **A workaround for a driver bug.** `Ssd1306` in `Iot.Device.Bindings` 4.2 always initialises the panel as 128×32 and draws only the top 32 rows. `OledDisplayService` sends the 64-row multiplex and COM-pin settings itself and writes the full frame. The fix is covered by a test.
+- **systemd with self-contained builds.** The Pi doesn't need the .NET runtime installed. `AddSystemd()` reports start-up and shutdown to systemd, and `Restart=always` covers crashes.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Likely cause / fix |
@@ -397,7 +446,8 @@ journalctl -u enviropi-display -f
 
 ## Known limitations
 
-- `OledDisplayService.RenderTelemetry` only clears the screen. Drawing the temperature and humidity text still needs to be added, for example with `Iot.Device.Graphics` and SkiaSharp.
+- The OLED rendering is checked by tests against the driver's I2C output, but hasn't been checked on a physical 128×64 panel yet.
+- The BME280 I2C address (`0x76`) and the publish interval (5 s) are fixed in code rather than read from `appsettings.json`.
 - The broker connection is plain MQTT on port 1883 with no TLS or authentication.
 
 ---
