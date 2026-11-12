@@ -20,6 +20,14 @@ internal sealed class FakeI2cDevice(int address = 0x3C) : I2cDevice
 
     public override I2cConnectionSettings ConnectionSettings { get; } = new(1, address);
 
+    public bool IsDisposed { get; private set; }
+
+    protected override void Dispose(bool disposing)
+    {
+        IsDisposed = true;
+        base.Dispose(disposing);
+    }
+
     public override void Write(ReadOnlySpan<byte> buffer)
     {
         if (FailWrites) throw new IOException("Simulated I2C failure");

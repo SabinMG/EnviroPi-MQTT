@@ -25,13 +25,17 @@ public sealed class Bme280ClimateSensor : IClimateSensor, IDisposable
     internal Bme280ClimateSensor(ILogger<Bme280ClimateSensor> logger, Func<I2cDevice> createDevice)
     {
         _logger = logger;
+        I2cDevice? device = null;
         try
         {
-            _bme280 = new Bme280(createDevice());
+            device = createDevice();
+            _bme280 = new Bme280(device);
             _logger.LogInformation("BME280 sensor connected over I2C.");
         }
         catch (Exception ex)
         {
+            // The driver only owns the device once it is constructed; close it ourselves otherwise.
+            device?.Dispose();
             _logger.LogWarning("BME280 sensor not available ({Message}).", ex.Message);
         }
     }

@@ -8,6 +8,28 @@ namespace EnviroPi.Tests.Display;
 public class OledDisplayServiceTests
 {
     [Fact]
+    public void Releases_the_i2c_device_when_setup_fails()
+    {
+        var device = new FakeI2cDevice { FailWrites = true };
+
+        using var display = new OledDisplayService(NullLogger<OledDisplayService>.Instance, () => device);
+
+        Assert.True(device.IsDisposed);
+    }
+
+    [Fact]
+    public void Releases_the_i2c_device_on_dispose()
+    {
+        var device = new FakeI2cDevice();
+        var display = new OledDisplayService(NullLogger<OledDisplayService>.Instance, () => device);
+        Assert.False(device.IsDisposed);
+
+        display.Dispose();
+
+        Assert.True(device.IsDisposed);
+    }
+
+    [Fact]
     public void Degrades_gracefully_when_no_display_hardware_is_present()
     {
         // On a dev machine / CI there is no I2C bus; construction and rendering must not throw.

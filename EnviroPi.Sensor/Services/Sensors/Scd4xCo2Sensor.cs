@@ -21,11 +21,13 @@ public sealed class Scd4xCo2Sensor : ICo2Sensor, IDisposable
     internal Scd4xCo2Sensor(ILogger<Scd4xCo2Sensor> logger, Func<I2cDevice> createDevice)
     {
         _logger = logger;
+        I2cDevice? device = null;
         try
         {
             // The constructor stops any measurement left running by a previous run and
             // re-initialises the sensor, so starting periodic mode afterwards is reliable.
-            var scd4x = new Scd4x(createDevice());
+            device = createDevice();
+            var scd4x = new Scd4x(device);
             scd4x.StartPeriodicMeasurements();
 
             _scd4x = scd4x;
@@ -33,6 +35,9 @@ public sealed class Scd4xCo2Sensor : ICo2Sensor, IDisposable
         }
         catch (Exception ex)
         {
+            // Close the bus handle directly: Scd4x.Dispose would send a stop command to a sensor
+            // that just failed, and the driver may not even have been constructed.
+            device?.Dispose();
             _logger.LogWarning("SCD4x CO2 sensor not available ({Message}). CO2 will not be published.", ex.Message);
         }
     }

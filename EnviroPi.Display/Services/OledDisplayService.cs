@@ -30,9 +30,11 @@ public sealed class OledDisplayService : IDisplayService, IDisposable
     {
         _logger = logger;
         MonoBitmap.RegisterAsImageFactory();
+        I2cDevice? device = null;
         try
         {
-            var oled = new Ssd1306(createDevice(), ScreenWidth, ScreenHeight);
+            device = createDevice();
+            var oled = new Ssd1306(device, ScreenWidth, ScreenHeight);
 
             // Iot.Device.Bindings 4.2 always initialises the SSD1306 as a 128x32 panel
             // (multiplex 0x1F, sequential COM pins), which leaves the bottom half of a
@@ -48,7 +50,8 @@ public sealed class OledDisplayService : IDisplayService, IDisposable
         }
         catch (Exception ex)
         {
-            // Hardware display not found; degrades gracefully
+            // Hardware display not found; degrades gracefully. Close the bus handle we opened.
+            device?.Dispose();
             _logger.LogWarning("OLED display not available ({Message}). Telemetry will only be logged.", ex.Message);
         }
     }
