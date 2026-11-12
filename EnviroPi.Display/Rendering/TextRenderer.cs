@@ -32,22 +32,36 @@ public static class TextRenderer
         => text.Length == 0 ? 0 : (text.Length * (Font.Width + CharSpacing) - CharSpacing) * scale;
 
     /// <summary>Draws <paramref name="text"/> with its top-left corner at (<paramref name="x"/>, <paramref name="y"/>).</summary>
-    public static void DrawText(BitmapImage image, string text, int x, int y, int scale = 1)
+    /// <param name="color">Pixel colour; defaults to white (lit). Use black to draw on a filled area.</param>
+    public static void DrawText(BitmapImage image, string text, int x, int y, int scale = 1, Color? color = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(scale, 1);
+        var ink = color ?? Color.White;
 
         foreach (var c in text)
         {
-            DrawChar(image, c, x, y, scale);
+            DrawChar(image, c, x, y, scale, ink);
             x += (Font.Width + CharSpacing) * scale;
         }
     }
 
     /// <summary>Draws <paramref name="text"/> horizontally centred on the image.</summary>
-    public static void DrawCentered(BitmapImage image, string text, int y, int scale = 1)
-        => DrawText(image, text, (image.Width - MeasureWidth(text, scale)) / 2, y, scale);
+    public static void DrawCentered(BitmapImage image, string text, int y, int scale = 1, Color? color = null)
+        => DrawText(image, text, (image.Width - MeasureWidth(text, scale)) / 2, y, scale, color);
 
-    private static void DrawChar(BitmapImage image, char c, int x, int y, int scale)
+    /// <summary>Fills a rectangle, clipped to the image.</summary>
+    public static void FillRect(BitmapImage image, int x, int y, int width, int height, Color color)
+    {
+        for (var py = Math.Max(y, 0); py < Math.Min(y + height, image.Height); py++)
+        {
+            for (var px = Math.Max(x, 0); px < Math.Min(x + width, image.Width); px++)
+            {
+                image.SetPixel(px, py, color);
+            }
+        }
+    }
+
+    private static void DrawChar(BitmapImage image, char c, int x, int y, int scale, Color color)
     {
         ReadOnlySpan<ushort> rows;
         if (c == '°')
@@ -66,22 +80,7 @@ public static class TextRenderer
                 // Leftmost column is the highest of the glyph's Width bits.
                 if ((rows[row] & (1 << (Font.Width - 1 - col))) != 0)
                 {
-                    FillBlock(image, x + col * scale, y + row * scale, scale);
-                }
-            }
-        }
-    }
-
-    private static void FillBlock(BitmapImage image, int x, int y, int size)
-    {
-        for (var dy = 0; dy < size; dy++)
-        {
-            for (var dx = 0; dx < size; dx++)
-            {
-                int px = x + dx, py = y + dy;
-                if (px >= 0 && py >= 0 && px < image.Width && py < image.Height)
-                {
-                    image.SetPixel(px, py, Color.White);
+                    FillRect(image, x + col * scale, y + row * scale, scale, scale, color);
                 }
             }
         }

@@ -1,3 +1,5 @@
+using EnviroPi.Shared.Models;
+
 namespace EnviroPi.Display.Services;
 
 /// <summary>
@@ -5,5 +7,9 @@ namespace EnviroPi.Display.Services;
 /// </summary>
 public interface IDisplayService
 {
-    void RenderTelemetry(double tempCelsius, double humidityPercent);
+    /// <summary>Shows <paramref name="telemetry"/> on the current page.</summary>
+    void RenderTelemetry(TelemetryPayload telemetry);
+
+    /// <summary>Switches to the next page (temperature/humidity ↔ CO₂) and redraws immediately.</summary>
+    void ShowNextPage();
 }

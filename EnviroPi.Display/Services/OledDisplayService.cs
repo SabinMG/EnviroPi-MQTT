@@ -1,5 +1,6 @@
 using System.Device.I2c;
 using EnviroPi.Display.Rendering;
+using EnviroPi.Shared.Models;
 using Iot.Device.Ssd13xx;
 using Iot.Device.Ssd13xx.Commands;
 using Iot.Device.Ssd13xx.Commands.Ssd1306Commands;
@@ -15,6 +16,8 @@ public sealed class OledDisplayService : IDisplayService, IDisposable
     private readonly Ssd1306? _oled;
     private readonly MonoBitmap _frame = new(ScreenWidth, ScreenHeight);
     private readonly Lock _drawLock = new();
+    private TelemetryPayload? _lastTelemetry;
+    private DisplayPage _page = DisplayPage.Climate;
 
     public OledDisplayService(ILogger<OledDisplayService> logger)
         // Address 0x3C is standard for 0.96" SSD1306 OLED screens
@@ -29,14 +32,18 @@ public sealed class OledDisplayService : IDisplayService, IDisposable
         MonoBitmap.RegisterAsImageFactory();
         try
         {
-            _oled = new Ssd1306(createDevice(), ScreenWidth, ScreenHeight);
+            var oled = new Ssd1306(createDevice(), ScreenWidth, ScreenHeight);
 
             // Iot.Device.Bindings 4.2 always initialises the SSD1306 as a 128x32 panel
             // (multiplex 0x1F, sequential COM pins), which leaves the bottom half of a
             // 128x64 screen blank. Reconfigure it for 64 rows.
-            _oled.SendCommand(new SetMultiplexRatio(ScreenHeight - 1));
-            _oled.SendCommand(new SetComPinsHardwareConfiguration(alternativeComPinConfiguration: true));
-            DrawFrame(_oled);
+            oled.SendCommand(new SetMultiplexRatio(ScreenHeight - 1));
+            oled.SendCommand(new SetComPinsHardwareConfiguration(alternativeComPinConfiguration: true));
+            TelemetryScreen.RenderWaiting(_frame);
+            DrawFrame(oled);
+
+            // Only keep the display once it is fully set up; a half-initialised one stays null.
+            _oled = oled;
             _logger.LogInformation("SSD1306 OLED display connected over I2C.");
         }
         catch (Exception ex)
@@ -46,22 +53,53 @@ public sealed class OledDisplayService : IDisplayService, IDisposable
         }
     }
 
-    public void RenderTelemetry(double tempCelsius, double humidityPercent)
+    public void RenderTelemetry(TelemetryPayload telemetry)
+    {
+        lock (_drawLock)
+        {
+            _lastTelemetry = telemetry;
+            Redraw();
+        }
+    }
+
+    public void ShowNextPage()
+    {
+        lock (_drawLock)
+        {
+            _page = _page == DisplayPage.Climate ? DisplayPage.Co2 : DisplayPage.Climate;
+            _logger.LogInformation("Display page switched to {Page}.", _page);
+            // Redraw the last reading now, so the press feels instant instead of waiting for the next message.
+            Redraw();
+        }
+    }
+
+    /// <summary>The page currently shown.</summary>
+    public DisplayPage CurrentPage
+    {
+        get { lock (_drawLock) return _page; }
+    }
+
+    // Caller holds _drawLock.
+    private void Redraw()
     {
         if (_oled == null) return;
 
-        lock (_drawLock)
+        try
         {
-            try
+            if (_lastTelemetry == null)
             {
-                TelemetryScreen.Render(_frame, tempCelsius, humidityPercent);
-                DrawFrame(_oled);
+                TelemetryScreen.RenderWaiting(_frame);
             }
-            catch (Exception ex)
+            else
             {
-                // A loose wire or I2C glitch shouldn't stop the service; the next reading retries.
-                _logger.LogWarning(ex, "Failed to draw telemetry on the OLED display.");
+                TelemetryScreen.Render(_frame, _lastTelemetry, _page);
             }
+            DrawFrame(_oled);
+        }
+        catch (Exception ex)
+        {
+            // A loose wire or I2C glitch shouldn't stop the service; the next reading retries.
+            _logger.LogWarning(ex, "Failed to draw on the OLED display.");
         }
     }
 

@@ -54,12 +54,12 @@ public sealed class EndToEndTests : IAsyncLifetime
         await receiver.StartAsync(CancellationToken.None);
         try
         {
-            var payload = new TelemetryPayload { DeviceId = "pi-test", TemperatureCelsius = 22.4, HumidityPercent = 41.7 };
+            var payload = new TelemetryPayload { DeviceId = "pi-test", TemperatureCelsius = 22.4, HumidityPercent = 41.7, Co2Ppm = 1234 };
 
             // The receiver subscribes asynchronously, so keep publishing until it sees a message.
             var rendered = await PublishUntilRenderedAsync(display, () => publisher.PublishAsync(payload));
 
-            Assert.Equal((22.4, 41.7), rendered);
+            Assert.Equal((22.4, 41.7, (double?)1234), rendered);
         }
         finally
         {
@@ -85,8 +85,8 @@ public sealed class EndToEndTests : IAsyncLifetime
                 await publisher.PublishAsync(valid);
             });
 
-            Assert.Equal((19.9, 60.1), rendered);
-            Assert.All(display.Renders, r => Assert.Equal((19.9, 60.1), r));
+            Assert.Equal((19.9, 60.1, (double?)null), rendered);
+            Assert.All(display.Renders, r => Assert.Equal((19.9, 60.1, (double?)null), r));
         }
         finally
         {
@@ -94,7 +94,7 @@ public sealed class EndToEndTests : IAsyncLifetime
         }
     }
 
-    private static async Task<(double Temp, double Humidity)> PublishUntilRenderedAsync(RecordingDisplay display, Func<Task> publish)
+    private static async Task<(double Temp, double Humidity, double? Co2)> PublishUntilRenderedAsync(RecordingDisplay display, Func<Task> publish)
     {
         using var cts = new CancellationTokenSource(Timeout);
         while (!display.FirstRender.IsCompleted)
@@ -116,15 +116,20 @@ public sealed class EndToEndTests : IAsyncLifetime
 
     private sealed class RecordingDisplay : IDisplayService
     {
-        private readonly TaskCompletionSource<(double, double)> _first = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<(double, double, double?)> _first = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public ConcurrentQueue<(double Temp, double Humidity)> Renders { get; } = new();
-        public Task<(double Temp, double Humidity)> FirstRender => _first.Task;
+        public ConcurrentQueue<(double Temp, double Humidity, double? Co2)> Renders { get; } = new();
+        public Task<(double Temp, double Humidity, double? Co2)> FirstRender => _first.Task;
 
-        public void RenderTelemetry(double tempCelsius, double humidityPercent)
+        public void RenderTelemetry(TelemetryPayload telemetry)
         {
-            Renders.Enqueue((tempCelsius, humidityPercent));
-            _first.TrySetResult((tempCelsius, humidityPercent));
+            var reading = (telemetry.TemperatureCelsius, telemetry.HumidityPercent, telemetry.Co2Ppm);
+            Renders.Enqueue(reading);
+            _first.TrySetResult(reading);
+        }
+
+        public void ShowNextPage()
+        {
         }
     }
 }

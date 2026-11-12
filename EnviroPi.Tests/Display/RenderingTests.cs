@@ -1,5 +1,6 @@
 using System.Globalization;
 using EnviroPi.Display.Rendering;
+using EnviroPi.Tests.TestDoubles;
 
 namespace EnviroPi.Tests.Display;
 
@@ -114,7 +115,7 @@ public class TelemetryScreenTests
     {
         using var frame = new MonoBitmap(128, 64);
 
-        TelemetryScreen.Render(frame, 22.4, 41.7);
+        TelemetryScreen.Render(frame, Readings.Of(22.4, 41.7), DisplayPage.Climate);
 
         Assert.True(AnyLitInRows(frame, TelemetryScreen.TemperatureLabelY, TelemetryScreen.TemperatureLabelY + 8), "temperature label");
         Assert.True(AnyLitInRows(frame, TelemetryScreen.TemperatureValueY, TelemetryScreen.TemperatureValueY + 24), "temperature value");
@@ -128,9 +129,9 @@ public class TelemetryScreenTests
         using var first = new MonoBitmap(128, 64);
         using var reused = new MonoBitmap(128, 64);
 
-        TelemetryScreen.Render(first, 11.1, 11.1);
-        TelemetryScreen.Render(reused, 88.8, 88.8);
-        TelemetryScreen.Render(reused, 11.1, 11.1);
+        TelemetryScreen.Render(first, Readings.Of(11.1, 11.1), DisplayPage.Climate);
+        TelemetryScreen.Render(reused, Readings.Of(88.8, 88.8), DisplayPage.Climate);
+        TelemetryScreen.Render(reused, Readings.Of(11.1, 11.1), DisplayPage.Climate);
 
         Assert.Equal(first.AsByteSpan().ToArray(), reused.AsByteSpan().ToArray());
     }
@@ -141,5 +142,89 @@ public class TelemetryScreenTests
             for (var x = 0; x < frame.Width; x++)
                 if (frame.IsOn(x, y)) return true;
         return false;
+    }
+}
+
+public class Co2PageTests
+{
+    [Theory]
+    [InlineData(612.0, "612")]
+    [InlineData(40000.0, "40000")]
+    [InlineData(null, "---")]
+    public void Formats_co2(double? ppm, string expected)
+    {
+        Assert.Equal(expected, TelemetryScreen.FormatCo2(ppm));
+    }
+
+    [Theory]
+    [InlineData(null, "NO SENSOR")]
+    [InlineData(450.0, "GOOD")]
+    [InlineData(999.0, "GOOD")]
+    [InlineData(1000.0, "VENTILATE")]
+    [InlineData(2500.0, "VENTILATE")]
+    public void Chooses_a_status_from_the_co2_level(double? ppm, string expected)
+    {
+        Assert.Equal(expected, TelemetryScreen.Co2Status(ppm));
+    }
+
+    [Fact]
+    public void Every_line_fits_on_screen_at_the_SCD41_maximum()
+    {
+        Assert.InRange(TextRenderer.MeasureWidth(TelemetryScreen.FormatCo2(40000), 3), 1, 128);
+        Assert.InRange(TextRenderer.MeasureWidth("VENTILATE", 2), 1, 128);
+        Assert.InRange(TextRenderer.MeasureWidth("NO SENSOR", 2), 1, 128);
+    }
+
+    [Fact]
+    public void Shows_a_different_screen_from_the_climate_page()
+    {
+        using var climate = new MonoBitmap(128, 64);
+        using var co2 = new MonoBitmap(128, 64);
+
+        TelemetryScreen.Render(climate, Readings.Of(22.4, 41.7, 612), DisplayPage.Climate);
+        TelemetryScreen.Render(co2, Readings.Of(22.4, 41.7, 612), DisplayPage.Co2);
+
+        Assert.NotEqual(climate.AsByteSpan().ToArray(), co2.AsByteSpan().ToArray());
+        Assert.True(LitInRows(co2, TelemetryScreen.Co2ValueY, TelemetryScreen.Co2ValueY + 24) > 0, "CO2 value");
+    }
+
+    [Fact]
+    public void Inverts_the_status_area_when_the_room_needs_airing()
+    {
+        using var good = new MonoBitmap(128, 64);
+        using var stale = new MonoBitmap(128, 64);
+
+        TelemetryScreen.Render(good, Readings.Of(22, 40, 600), DisplayPage.Co2);
+        TelemetryScreen.Render(stale, Readings.Of(22, 40, 1450), DisplayPage.Co2);
+
+        // A filled box with dark text lights most of the status rows; plain "GOOD" lights few.
+        var statusArea = 128 * (64 - TelemetryScreen.Co2StatusBoxY);
+        Assert.True(LitInRows(stale, TelemetryScreen.Co2StatusBoxY, 64) > statusArea / 2);
+        Assert.True(LitInRows(good, TelemetryScreen.Co2StatusBoxY, 64) < statusArea / 4);
+    }
+
+    [Fact]
+    public void Shows_placeholders_when_there_is_no_co2_sensor()
+    {
+        using var noSensor = new MonoBitmap(128, 64);
+        using var expected = new MonoBitmap(128, 64);
+
+        TelemetryScreen.Render(noSensor, Readings.Of(22, 40, co2Ppm: null), DisplayPage.Co2);
+
+        // Same pixels as drawing the placeholder texts directly.
+        expected.Clear(System.Drawing.Color.Black);
+        TextRenderer.DrawCentered(expected, "CO2 (ppm)", TelemetryScreen.Co2LabelY);
+        TextRenderer.DrawCentered(expected, "---", TelemetryScreen.Co2ValueY, scale: 3);
+        TextRenderer.DrawCentered(expected, "NO SENSOR", TelemetryScreen.Co2StatusTextY, scale: 2);
+        Assert.Equal(expected.AsByteSpan().ToArray(), noSensor.AsByteSpan().ToArray());
+    }
+
+    private static int LitInRows(MonoBitmap frame, int fromY, int toY)
+    {
+        var count = 0;
+        for (var y = fromY; y < toY; y++)
+            for (var x = 0; x < frame.Width; x++)
+                if (frame.IsOn(x, y)) count++;
+        return count;
     }
 }

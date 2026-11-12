@@ -38,7 +38,7 @@ public class MqttReceiverWorker : BackgroundService
                 var data = JsonSerializer.Deserialize<TelemetryPayload>(rawPayload);
                 if (data != null)
                 {
-                    _displayService.RenderTelemetry(data.TemperatureCelsius, data.HumidityPercent);
+                    _displayService.RenderTelemetry(data);
                 }
             }
             catch (Exception ex)

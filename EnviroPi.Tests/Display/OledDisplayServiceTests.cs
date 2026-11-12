@@ -13,7 +13,7 @@ public class OledDisplayServiceTests
         // On a dev machine / CI there is no I2C bus; construction and rendering must not throw.
         using var display = new OledDisplayService(NullLogger<OledDisplayService>.Instance);
 
-        var ex = Record.Exception(() => display.RenderTelemetry(21.5, 48.3));
+        var ex = Record.Exception(() => display.RenderTelemetry(Readings.Of(21.5, 48.3)));
 
         Assert.Null(ex);
     }
@@ -37,7 +37,7 @@ public class OledDisplayServiceTests
         using var display = new OledDisplayService(NullLogger<OledDisplayService>.Instance, () => device);
         device.Writes.Clear();   // ignore init and clear-screen traffic
 
-        display.RenderTelemetry(22.4, 41.7);
+        display.RenderTelemetry(Readings.Of(22.4, 41.7));
 
         // SSD1306 data writes start with control byte 0x40. In horizontal addressing mode each
         // byte is a vertical strip of 8 pixels (LSB on top), pages of 8 rows left to right.
@@ -45,7 +45,7 @@ public class OledDisplayServiceTests
         Assert.Equal(128 * 64 / 8, data.Length);
 
         using var expected = new MonoBitmap(128, 64);
-        TelemetryScreen.Render(expected, 22.4, 41.7);
+        TelemetryScreen.Render(expected, Readings.Of(22.4, 41.7), DisplayPage.Climate);
         for (var y = 0; y < 64; y++)
         {
             for (var x = 0; x < 128; x++)
@@ -63,8 +63,75 @@ public class OledDisplayServiceTests
         using var display = new OledDisplayService(NullLogger<OledDisplayService>.Instance, () => device);
         device.FailWrites = true;
 
-        var ex = Record.Exception(() => display.RenderTelemetry(22.4, 41.7));
+        var ex = Record.Exception(() => display.RenderTelemetry(Readings.Of(22.4, 41.7)));
 
         Assert.Null(ex);
+    }
+
+    [Fact]
+    public void Starts_on_the_climate_page_and_toggles_between_pages()
+    {
+        using var display = new OledDisplayService(NullLogger<OledDisplayService>.Instance, () => new FakeI2cDevice());
+
+        Assert.Equal(DisplayPage.Climate, display.CurrentPage);
+        display.ShowNextPage();
+        Assert.Equal(DisplayPage.Co2, display.CurrentPage);
+        display.ShowNextPage();
+        Assert.Equal(DisplayPage.Climate, display.CurrentPage);
+    }
+
+    [Fact]
+    public void Switching_page_redraws_the_last_reading_immediately()
+    {
+        var device = new FakeI2cDevice();
+        using var display = new OledDisplayService(NullLogger<OledDisplayService>.Instance, () => device);
+        var reading = Readings.Of(22.4, 41.7, co2Ppm: 1450);
+        display.RenderTelemetry(reading);
+        device.Writes.Clear();
+
+        display.ShowNextPage();
+
+        using var expected = new MonoBitmap(128, 64);
+        TelemetryScreen.Render(expected, reading, DisplayPage.Co2);
+        Assert.Equal(ToDisplayBytes(expected), SentPixelData(device));
+    }
+
+    [Fact]
+    public void Shows_a_waiting_screen_until_the_first_reading_arrives()
+    {
+        var device = new FakeI2cDevice();
+        using var display = new OledDisplayService(NullLogger<OledDisplayService>.Instance, () => device);
+        device.Writes.Clear();
+
+        display.ShowNextPage();   // no reading yet
+
+        using var expected = new MonoBitmap(128, 64);
+        TelemetryScreen.RenderWaiting(expected);
+        Assert.Equal(ToDisplayBytes(expected), SentPixelData(device));
+    }
+
+    [Fact]
+    public void Switching_page_without_display_hardware_does_not_throw()
+    {
+        using var display = new OledDisplayService(NullLogger<OledDisplayService>.Instance, () => throw new IOException("no bus"));
+
+        var ex = Record.Exception(display.ShowNextPage);
+
+        Assert.Null(ex);
+        Assert.Equal(DisplayPage.Co2, display.CurrentPage);
+    }
+
+    // SSD1306 data writes start with control byte 0x40.
+    private static byte[] SentPixelData(FakeI2cDevice device)
+        => device.Writes.Where(w => w[0] == 0x40).SelectMany(w => w.Skip(1)).ToArray();
+
+    // Horizontal addressing: each byte is a vertical strip of 8 pixels (LSB on top), page by page.
+    private static byte[] ToDisplayBytes(MonoBitmap frame)
+    {
+        var bytes = new byte[frame.Width * frame.Height / 8];
+        for (var y = 0; y < frame.Height; y++)
+            for (var x = 0; x < frame.Width; x++)
+                if (frame.IsOn(x, y)) bytes[(y / 8) * frame.Width + x] |= (byte)(1 << (y % 8));
+        return bytes;
     }
 }
