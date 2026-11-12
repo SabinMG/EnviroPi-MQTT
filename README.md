@@ -104,7 +104,8 @@ EnviroPi-MQTT/
 ├── EnviroPi.Sensor/                      # Sensor -> MQTT (publisher)
 │   ├── Services/IMqttPublishService.cs   # Publishing abstraction injected into the worker
 │   ├── Services/MqttPublishService.cs    # Owns the MQTT client: connect, retry, publish, disconnect
-│   ├── Services/Scd4xCo2Sensor.cs        # SCD40/41 CO₂ sensor behind ICo2Sensor
+│   ├── Services/Sensors/Bme280ClimateSensor.cs  # BME280 temperature/humidity behind IClimateSensor
+│   ├── Services/Sensors/Scd4xCo2Sensor.cs       # SCD40/41 CO₂ sensor behind ICo2Sensor
 │   ├── Workers/SensorPublisherWorker.cs  # Reads the sensors, calls IMqttPublishService
 │   ├── appsettings.json
 │   └── Program.cs
@@ -233,7 +234,8 @@ The tests need no hardware and no Mosquitto install, so they run the same on a l
 | `MqttConnection` | Connects first time, retries with attempt numbers, stops on cancellation |
 | `TelemetryPayload` / `MqttOptions` | JSON round trip, the exact wire format, messages without `Co2Ppm` still parse, config binding, Sensor and Display `appsettings.json` agree on broker and topic |
 | `Scd4xCo2Sensor` | Drives the real SCD4x driver through a fake I2C device that answers with CRC-checked Sensirion frames: start-up commands, ppm reading, missing sensor, bus failure during a read and on shutdown |
-| `SensorPublisherWorker` | Publishes rounded readings tagged with the machine name, with CO₂ when available; a failing CO₂ sensor doesn't stop temperature and humidity; shuts down cleanly |
+| `Bme280ClimateSensor` | Reports no reading when the BME280 is missing or the I2C bus fails |
+| `SensorPublisherWorker` | Publishes rounded readings tagged with the machine name, with CO₂ when available; default values without a BME280; a failing sensor doesn't stop the other's values; shuts down cleanly |
 | OLED rendering | Font drawing, scaling, clipping, the `°` glyph, culture-independent formatting, both pages, the inverted VENTILATE box at ≥ 1000 ppm, NO SENSOR placeholders, every value fits on screen |
 | `OledDisplayService` | Drives the real SSD1306 driver through a fake I2C device and checks the 1,024 bytes sent match the rendered frame pixel for pixel; page switching redraws the last reading at once; waiting screen before the first reading |
 | `ButtonWorker` | Each press switches page; configured GPIO pin; button released on shutdown; no GPIO or a failing display doesn't stop the service; pin read from `appsettings.json` (including `null` to disable) |
@@ -374,7 +376,7 @@ i2cdetect -y 1                        # should show 3c, 62 and 76
 
 > The SCD4x needs a few minutes after power-up to settle, and its automatic self-calibration assumes it sees fresh outdoor-level air (about 420 ppm) regularly. Readings are most accurate after it has run for about a week in a room that gets aired.
 
-> Some BME280 boards use address `0x77`. If `i2cdetect` shows `77`, change `Bme280.DefaultI2cAddress` to `Bme280.SecondaryI2cAddress` in `SensorPublisherWorker.cs`.
+> Some BME280 boards use address `0x77`. If `i2cdetect` shows `77`, change `Bme280.DefaultI2cAddress` to `Bme280.SecondaryI2cAddress` in `Services/Sensors/Bme280ClimateSensor.cs`.
 
 ---
 
@@ -470,7 +472,7 @@ journalctl -u enviropi-display -f
 - **QoS 1 (at least once).** A missed reading is harmless but cheap to avoid. Each reading replaces the last one, so an occasional duplicate is fine and exactly-once (QoS 2) isn't worth its extra round trips.
 - **A shared contract library.** `TelemetryPayload` and `MqttOptions` live in `EnviroPi.Shared`, so the publisher and subscriber can't drift apart. A test also pins the exact JSON field names.
 - **Degrade, don't crash.** With no sensor, the publisher sends dummy data. With no screen, the display only logs. With no broker, both retry every 5 seconds. Services can start in any order and run on a laptop with no hardware.
-- **Hardware behind interfaces.** Workers depend on `IMqttPublishService` and `IDisplayService`, so they can be tested with fakes. The OLED service accepts an I2C device factory, so tests run the real SSD1306 driver against a fake bus.
+- **Hardware behind interfaces.** Workers depend on `IMqttPublishService`, `IClimateSensor`, `ICo2Sensor` and `IDisplayService`, so they can be tested with fakes. The sensor and OLED services accept an I2C device factory, so tests run the real drivers against a fake bus.
 - **No SkiaSharp for the OLED.** `Iot.Device.Bindings` normally renders text through SkiaSharp, which ships large native libraries. A 1-bit 128×64 screen only needs to set pixels, so `MonoBitmap` and `TextRenderer` do that with the font already built into the library.
 - **A workaround for a driver bug.** `Ssd1306` in `Iot.Device.Bindings` 4.2 always initialises the panel as 128×32 and draws only the top 32 rows. `OledDisplayService` sends the 64-row multiplex and COM-pin settings itself and writes the full frame. The fix is covered by a test.
 - **No fake CO₂ value.** Without a BME280 the publisher sends dummy temperature and humidity so the pipeline can be tested, but a made-up CO₂ number could be mistaken for a real air-quality reading. `Co2Ppm` is `null` instead, and the display shows `---` / NO SENSOR.

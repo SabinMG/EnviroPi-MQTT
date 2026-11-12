@@ -1,7 +1,7 @@
 using System.Device.I2c;
 using Iot.Device.Scd4x;
 
-namespace EnviroPi.Sensor.Services;
+namespace EnviroPi.Sensor.Services.Sensors;
 
 /// <summary>
 /// Sensirion SCD40/SCD41 NDIR CO₂ sensor on I2C bus 1, address 0x62.

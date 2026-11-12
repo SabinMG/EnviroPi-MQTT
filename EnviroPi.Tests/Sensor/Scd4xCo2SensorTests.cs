@@ -1,4 +1,4 @@
-using EnviroPi.Sensor.Services;
+using EnviroPi.Sensor.Services.Sensors;
 using EnviroPi.Tests.TestDoubles;
 using Microsoft.Extensions.Logging.Abstractions;
 

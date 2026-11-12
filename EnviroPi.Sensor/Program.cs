@@ -1,4 +1,5 @@
 using EnviroPi.Sensor.Services;
+using EnviroPi.Sensor.Services.Sensors;
 using EnviroPi.Sensor.Workers;
 using EnviroPi.Shared.Models;
 
@@ -9,6 +10,7 @@ builder.Services.Configure<MqttOptions>(
 
 // One MQTT connection shared by everything that publishes
 builder.Services.AddSingleton<IMqttPublishService, MqttPublishService>();
+builder.Services.AddSingleton<IClimateSensor, Bme280ClimateSensor>();
 builder.Services.AddSingleton<ICo2Sensor, Scd4xCo2Sensor>();
 
 builder.Services.AddHostedService<SensorPublisherWorker>();

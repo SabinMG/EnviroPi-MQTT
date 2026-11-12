@@ -1,7 +1,5 @@
-using System.Device.I2c;
-using Iot.Device.Bmxx80;
-using Iot.Device.Bmxx80.PowerMode;
 using EnviroPi.Sensor.Services;
+using EnviroPi.Sensor.Services.Sensors;
 using EnviroPi.Shared.Models;
 
 namespace EnviroPi.Sensor.Workers;
@@ -10,34 +8,25 @@ public class SensorPublisherWorker : BackgroundService
 {
     private static readonly TimeSpan PublishInterval = TimeSpan.FromSeconds(5);
 
+    // Published when no BME280 is connected, so the pipeline can be tested without hardware.
+    private static readonly ClimateReading DummyClimate = new(TemperatureCelsius: 20.0, HumidityPercent: 50.0);
+
     private readonly IMqttPublishService _publisher;
+    private readonly IClimateSensor _climateSensor;
     private readonly ICo2Sensor _co2Sensor;
     private readonly ILogger<SensorPublisherWorker> _logger;
-    private Bme280? _bme280;
 
-    public SensorPublisherWorker(IMqttPublishService publisher, ICo2Sensor co2Sensor, ILogger<SensorPublisherWorker> logger)
+    public SensorPublisherWorker(IMqttPublishService publisher, IClimateSensor climateSensor, ICo2Sensor co2Sensor,
+        ILogger<SensorPublisherWorker> logger)
     {
         _publisher = publisher;
+        _climateSensor = climateSensor;
         _co2Sensor = co2Sensor;
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // 1. Initialize Hardware (I2C Bus 1, Address 0x76)
-        try
-        {
-            var i2cSettings = new I2cConnectionSettings(busId: 1, deviceAddress: Bme280.DefaultI2cAddress);
-            var i2cDevice = I2cDevice.Create(i2cSettings);
-            _bme280 = new Bme280(i2cDevice);
-            _logger.LogInformation("Hardware BME280 sensor connected over I2C.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to connect to I2C sensor. Running with default dummy data.");
-        }
-
-        // 2. Sensor Loop
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -60,29 +49,32 @@ public class SensorPublisherWorker : BackgroundService
 
     private async Task<TelemetryPayload> ReadTelemetryAsync(CancellationToken stoppingToken)
     {
-        double temp = 20.0;
-        double hum = 50.0;
-
-        if (_bme280 != null)
-        {
-            _bme280.SetPowerMode(Bmx280PowerMode.Forced);
-            await Task.Delay(100, stoppingToken);
-            var readResult = await _bme280.ReadAsync();
-            temp = readResult.Temperature?.DegreesCelsius ?? 0.0;
-            hum = readResult.Humidity?.Percent ?? 0.0;
-        }
+        var climate = await ReadClimateAsync(stoppingToken) ?? DummyClimate;
 
         return new TelemetryPayload
         {
             DeviceId = Environment.MachineName,
             Timestamp = DateTime.UtcNow,
-            TemperatureCelsius = Math.Round(temp, 1),
-            HumidityPercent = Math.Round(hum, 1),
+            TemperatureCelsius = Math.Round(climate.TemperatureCelsius, 1),
+            HumidityPercent = Math.Round(climate.HumidityPercent, 1),
             Co2Ppm = await ReadCo2Async(stoppingToken)
         };
     }
 
-    // A CO2 sensor problem must not stop temperature and humidity from being published.
+    // Each sensor is read on its own, so a problem with one never stops the others from being published.
+    private async Task<ClimateReading?> ReadClimateAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            return await _climateSensor.ReadAsync(stoppingToken);
+        }
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Temperature/humidity reading failed; publishing default values.");
+            return null;
+        }
+    }
+
     private async Task<double?> ReadCo2Async(CancellationToken stoppingToken)
     {
         try
@@ -94,11 +86,5 @@ public class SensorPublisherWorker : BackgroundService
             _logger.LogWarning(ex, "CO2 reading failed; publishing without CO2.");
             return null;
         }
-    }
-
-    public override void Dispose()
-    {
-        _bme280?.Dispose();
-        base.Dispose();
     }
 }

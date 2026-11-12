@@ -1,4 +1,4 @@
-namespace EnviroPi.Sensor.Services;
+namespace EnviroPi.Sensor.Services.Sensors;
 
 /// <summary>
 /// Reads the CO₂ concentration of the surrounding air.
