@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EnviroPi.Sensor", "EnviroPi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EnviroPi.Display", "EnviroPi.Display\EnviroPi.Display.csproj", "{422A8895-C882-48BA-8CDD-DDD1E6B06D11}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EnviroPi.Tests", "EnviroPi.Tests\EnviroPi.Tests.csproj", "{3006B44F-3089-406F-9E86-CFA71EEE2B91}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +57,18 @@ Global
 		{422A8895-C882-48BA-8CDD-DDD1E6B06D11}.Release|x64.Build.0 = Release|Any CPU
 		{422A8895-C882-48BA-8CDD-DDD1E6B06D11}.Release|x86.ActiveCfg = Release|Any CPU
 		{422A8895-C882-48BA-8CDD-DDD1E6B06D11}.Release|x86.Build.0 = Release|Any CPU
+		{3006B44F-3089-406F-9E86-CFA71EEE2B91}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3006B44F-3089-406F-9E86-CFA71EEE2B91}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3006B44F-3089-406F-9E86-CFA71EEE2B91}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3006B44F-3089-406F-9E86-CFA71EEE2B91}.Debug|x64.Build.0 = Debug|Any CPU
+		{3006B44F-3089-406F-9E86-CFA71EEE2B91}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3006B44F-3089-406F-9E86-CFA71EEE2B91}.Debug|x86.Build.0 = Debug|Any CPU
+		{3006B44F-3089-406F-9E86-CFA71EEE2B91}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3006B44F-3089-406F-9E86-CFA71EEE2B91}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3006B44F-3089-406F-9E86-CFA71EEE2B91}.Release|x64.ActiveCfg = Release|Any CPU
+		{3006B44F-3089-406F-9E86-CFA71EEE2B91}.Release|x64.Build.0 = Release|Any CPU
+		{3006B44F-3089-406F-9E86-CFA71EEE2B91}.Release|x86.ActiveCfg = Release|Any CPU
+		{3006B44F-3089-406F-9E86-CFA71EEE2B91}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
