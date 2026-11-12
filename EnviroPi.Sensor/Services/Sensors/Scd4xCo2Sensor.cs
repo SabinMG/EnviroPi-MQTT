@@ -37,7 +37,7 @@ public sealed class Scd4xCo2Sensor : ICo2Sensor, IDisposable
         }
     }
 
-    public async Task<double?> ReadCo2PpmAsync(CancellationToken cancellationToken)
+    public async Task<double?> ReadAsync(CancellationToken cancellationToken)
     {
         if (_scd4x == null) return null;
 

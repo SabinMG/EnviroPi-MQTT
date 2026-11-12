@@ -9,5 +9,5 @@ public interface ICo2Sensor
     /// Returns the latest CO₂ reading in ppm, or <c>null</c> when no sensor is connected
     /// or the reading failed.
     /// </summary>
-    Task<double?> ReadCo2PpmAsync(CancellationToken cancellationToken);
+    Task<double?> ReadAsync(CancellationToken cancellationToken);
 }

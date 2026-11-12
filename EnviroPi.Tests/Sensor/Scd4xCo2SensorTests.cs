@@ -43,7 +43,7 @@ public class Scd4xCo2SensorTests
         using var sensor = new Scd4xCo2Sensor(NullLogger<Scd4xCo2Sensor>.Instance,
             () => throw new IOException("No device at 0x62"));
 
-        Assert.Null(await sensor.ReadCo2PpmAsync(CancellationToken.None));
+        Assert.Null(await sensor.ReadAsync(CancellationToken.None));
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public class Scd4xCo2SensorReadTests
     {
         using var sensor = new Scd4xCo2Sensor(NullLogger<Scd4xCo2Sensor>.Instance, () => Scd4xCommands.Device(co2Ppm: 1234));
 
-        Assert.Equal(1234, await sensor.ReadCo2PpmAsync(CancellationToken.None));
+        Assert.Equal(1234, await sensor.ReadAsync(CancellationToken.None));
     }
 }
 
@@ -81,7 +81,7 @@ public class Scd4xCo2SensorReadFailureTests
         using var sensor = new Scd4xCo2Sensor(NullLogger<Scd4xCo2Sensor>.Instance, () => device);
         device.FailWrites = true;
 
-        Assert.Null(await sensor.ReadCo2PpmAsync(CancellationToken.None));
+        Assert.Null(await sensor.ReadAsync(CancellationToken.None));
         // Shutting down with a broken bus must not throw either (the driver's Dispose writes a stop command).
     }
 }

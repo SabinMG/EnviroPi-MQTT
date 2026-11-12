@@ -79,7 +79,7 @@ public class SensorPublisherWorker : BackgroundService
     {
         try
         {
-            return await _co2Sensor.ReadCo2PpmAsync(stoppingToken);
+            return await _co2Sensor.ReadAsync(stoppingToken);
         }
         catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
         {

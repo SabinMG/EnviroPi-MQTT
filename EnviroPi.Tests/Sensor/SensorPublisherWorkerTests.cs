@@ -70,7 +70,7 @@ public class SensorPublisherWorkerTests
     public async Task Still_publishes_temperature_and_humidity_when_the_co2_sensor_throws()
     {
         var co2 = Substitute.For<ICo2Sensor>();
-        co2.ReadCo2PpmAsync(Arg.Any<CancellationToken>()).ThrowsAsync(new IOException("SCD4x unplugged"));
+        co2.ReadAsync(Arg.Any<CancellationToken>()).ThrowsAsync(new IOException("SCD4x unplugged"));
 
         var payload = await PublishFirstPayloadAsync(ClimateReturning(new ClimateReading(23.1, 38.2)), co2);
 
@@ -102,7 +102,7 @@ public class SensorPublisherWorkerTests
     private static ICo2Sensor Co2Returning(double? ppm)
     {
         var co2 = Substitute.For<ICo2Sensor>();
-        co2.ReadCo2PpmAsync(Arg.Any<CancellationToken>()).Returns(ppm);
+        co2.ReadAsync(Arg.Any<CancellationToken>()).Returns(ppm);
         return co2;
     }
 
