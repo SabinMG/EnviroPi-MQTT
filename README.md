@@ -75,7 +75,7 @@ The same `TelemetryPayload` class (in `EnviroPi.Shared`) is used to write and re
 ## Project layout
 
 ```text
-MQTTnet-Pi/
+EnviroPi-MQTT/
 ├── EnviroPi.sln
 ├── EnviroPi.Shared/                      # Class library used by both services
 │   ├── Models/MqttOptions.cs             # Settings bound from appsettings.json
